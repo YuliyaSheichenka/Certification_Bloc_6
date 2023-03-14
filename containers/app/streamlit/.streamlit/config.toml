@@ -1,0 +1,13 @@
+[browser]
+serverAddress = '0.0.0.0'
+
+[server]
+enableCORS = false
+enableXsrfProtection = false
+enableWebsocketCompression = false
+
+[global]
+dataFrameSerialization = "legacy"
+
+[theme]
+base="dark"

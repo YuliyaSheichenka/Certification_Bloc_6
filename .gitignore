@@ -1,0 +1,13 @@
+*.env
+*.sh
+secrets.bat
+secrets.sh
+*.env
+*.h5
+*.bat
+*.zip
+content_old/
+.idea/
+.ipynb_checkpoints
+
+

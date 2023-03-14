@@ -1,0 +1,173 @@
+version: '3.8'
+
+services:
+  web:
+    container_name: fastapi
+    build:
+      context: .
+      dockerfile: app/fastapi/Dockerfile
+    expose:
+      - 80
+    environment:
+      - DATABASE_URL=postgresql://$POSTGRES_USER:$POSTGRES_PASSWORD@postgresdb:5432/$POSTGRES_DB 
+      - MLFLOW_S3_ENDPOINT_URL=$MLFLOW_S3_ENDPOINT_URL
+      - MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - BACKEND_STORE_URI="mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysqldb:3306/${MYSQL_DATABASE}" 
+
+    depends_on:
+      - postgresdb
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.fastapi.rule=Host(`$API`)"
+      - "traefik.http.routers.fastapi.tls=true"
+      - "traefik.http.routers.fastapi.tls.certresolver=letsencrypt"
+
+
+  postgresdb:
+    container_name: fastapi_db
+    image: postgres:13-alpine
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data/
+    expose:
+      - 5432
+    environment:
+      - POSTGRES_USER=$POSTGRES_USER
+      - POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+      - POSTGRES_DB=$POSTGRES_DB
+
+  traefik:
+    container_name: traefik
+    build:
+      context: .
+      dockerfile: app/traefik/Dockerfile
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./letsencrypt:/letsencrypt"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`$DASHBOARD`)"
+      - "traefik.http.routers.dashboard.tls=true"
+      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.dashboard.middlewares=auth"
+      - "traefik.http.middlewares.auth.basicauth.users=$TRAEFIK_BASIC_AUTH:$TRAEFIK_HASH"
+
+  minio:
+    restart: always
+    image: minio/minio
+    container_name: mlflow_s3
+    expose:
+      - 9000
+      - 9001
+    command: server /data --console-address ':9001' --address ':9000'
+    environment:
+      - MINIO_ROOT_USER=${AWS_ACCESS_KEY_ID}
+      - MINIO_ROOT_PASSWORD=${AWS_SECRET_ACCESS_KEY}
+      - MINIO_BROWSER_REDIRECT_URL=$MINIO_BROWSER_REDIRECT_URL
+      - MINIO_SERVER_URL=$MINIO_SERVER_URL
+    volumes:
+      - minio_data:/data
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.minio-console.rule=Host(`$CONSOLE_BUCKET`)"
+      - "traefik.http.routers.minio-console.entrypoints=websecure"
+      - "traefik.http.routers.minio-console.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.minio-console.service=minio-console"
+      - "traefik.http.services.minio-console.loadbalancer.server.port=9001"
+      - "traefik.http.routers.minio.rule=Host(`$BUCKET`)"
+      - "traefik.http.routers.minio.entrypoints=websecure"
+      - "traefik.http.routers.minio.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.minio.service=minio"
+      - "traefik.http.services.minio.loadbalancer.server.port=9000"
+
+  mc:
+    image: minio/mc
+    depends_on:
+      - minio
+    container_name: mc
+    env_file:
+      - .env
+    entrypoint: >
+      /bin/sh -c "
+      until (/usr/bin/mc config host add minio ${MINIO_SERVER_URL} ${AWS_ACCESS_KEY_ID} ${AWS_SECRET_ACCESS_KEY}) do echo '...waiting...' && sleep 1; done;
+      /usr/bin/mc mb minio/mlflow;
+      /usr/bin/mc policy set download minio/mlflow;
+      exit 0;
+      "      
+      
+      #volumes:
+      #- ./wait-for-it.sh:/tmp/wait-for-it.sh
+
+  mysqldb:
+    restart: always
+    image: mysql:8.0.32-debian
+    container_name: mlflow_db
+    expose:
+      - 3306
+    environment:
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - openbrain_dbdata:/var/lib/mysql:rw
+
+
+  mlflow:
+    restart: always
+    build: ./app/mlflow
+    container_name: mlflow_server
+    depends_on:
+      - mc
+      - mysqldb
+    expose:
+      - 5000
+    environment:
+      - MLFLOW_S3_ENDPOINT_URL=$MLFLOW_S3_ENDPOINT_URL
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+    command: mlflow server --backend-store-uri mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysqldb:3306/${MYSQL_DATABASE} --default-artifact-root s3://mlflow/ --serve-artifacts --host 0.0.0.0
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mlflow.rule=Host(`$MLFLOW`)"
+      - "traefik.http.routers.mlflow.tls=true"
+      - "traefik.http.routers.mlflow.tls.certresolver=letsencrypt"
+
+  streamlit:
+    build: ./app/streamlit
+    container_name: streamlit_app
+    restart: always
+    expose:
+      - 8501
+    command: streamlit run app.py
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.streamlit.rule=Host(`$STREAMLIT`)"
+      - "traefik.http.routers.streamlit.tls=true"
+      - "traefik.http.routers.streamlit.tls.certresolver=letsencrypt"
+
+  nginx:
+    container_name: nginx
+    image: nginx:latest
+    restart: unless-stopped
+    entrypoint: ''
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.nginx.rule=Host(`$NGINX`)"
+      - "traefik.http.routers.nginx.tls=true"
+      - "traefik.http.routers.nginx.tls.certresolver=letsencrypt"
+    volumes:
+      - ./app/nginx/conf/www.pryda.dev.conf:/etc/nginx/conf.d/www.pryda.dev:ro
+      - ./app/nginx/data/:/usr/share/nginx/html/
+
+volumes:
+  openbrain_dbdata:
+    external: true
+  minio_data:
+  postgres_data_prod:
+  letsencrypt:

@@ -1,0 +1,12 @@
+server {
+    # On defini le port d'écoute de Nginx dans le conteneur
+    listen 80;
+    # On défini l'URL à laquelle Nginx devra répondre
+    server_name www.brainsight.tech;
+
+    location / {
+        # On indique le répertoire contenant les fichiers à afficher
+        root /usr/share/nginx/html/;
+        index index.html index.htm;
+    }
+}

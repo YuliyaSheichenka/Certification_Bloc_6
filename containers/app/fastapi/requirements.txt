@@ -1,0 +1,16 @@
+asyncpg
+fastapi
+ormar
+psycopg2-binary
+uvicorn
+mlflow
+pandas
+pydantic
+typing
+tensorflow
+Pillow~=9.2.0
+python-multipart
+fsspec
+s3fs
+boto3
+scikit-learn
