@@ -6,7 +6,7 @@ https://www.brainsight.tech
 
 ## Video presentation
 
-[Bloc 6: BrainSight: Alzheimer prediction through CNN - Video presentation](xxxx)
+[Bloc 6: BrainSight: Alzheimer prediction through CNN - Video presentation](https://share.vidyard.com/watch/8R4Xt2K5d8dAwsEQVrfok6?)
 
 ## Additional information:
 
@@ -54,5 +54,5 @@ You can write me at **sheichenkojuly@gmail.com**
 
 ## References
 
-- Dataset on Kaggle: [Alzheimer's Dataset (4 class of Images)](https://www.kaggle.com/datasets/tourist55/alzheimers-dataset-4-class-of-images)
+- Dataset on Kaggle: [Alzheimer's Dataset (4 classes of Images)](https://www.kaggle.com/datasets/tourist55/alzheimers-dataset-4-class-of-images)
 - [OASIS (Open Access Series of Imaging Studies) datasets](https://www.oasis-brains.org/)
